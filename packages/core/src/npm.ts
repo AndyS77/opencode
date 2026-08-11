@@ -69,6 +69,24 @@ interface ArboristTree {
   edgesOut: Map<string, { to?: ArboristNode }>
 }
 
+interface PackageJson {
+  dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
+  peerDependencies?: Record<string, string>
+  optionalDependencies?: Record<string, string>
+}
+
+interface PackageLockEntry {
+  dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
+  peerDependencies?: Record<string, string>
+  optionalDependencies?: Record<string, string>
+}
+
+interface PackageLock {
+  packages?: Record<string, PackageLockEntry>
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -160,17 +178,17 @@ const layer = Layer.effect(
         const pkg = yield* afs.readJson(path.join(dir, "package.json")).pipe(Effect.orElseSucceed(() => ({})))
         const lock = yield* afs.readJson(path.join(dir, "package-lock.json")).pipe(Effect.orElseSucceed(() => ({})))
 
-        const pkgAny = pkg as any
-        const lockAny = lock as any
+        const pkgJson = pkg as PackageJson
+        const lockJson = lock as PackageLock
         const declared = new Set([
-          ...Object.keys(pkgAny?.dependencies || {}),
-          ...Object.keys(pkgAny?.devDependencies || {}),
-          ...Object.keys(pkgAny?.peerDependencies || {}),
-          ...Object.keys(pkgAny?.optionalDependencies || {}),
+          ...Object.keys(pkgJson?.dependencies || {}),
+          ...Object.keys(pkgJson?.devDependencies || {}),
+          ...Object.keys(pkgJson?.peerDependencies || {}),
+          ...Object.keys(pkgJson?.optionalDependencies || {}),
           ...(input?.add || []).map((pkg) => pkg.name),
         ])
 
-        const root = lockAny?.packages?.[""] || {}
+        const root = lockJson?.packages?.[""] || {}
         const locked = new Set([
           ...Object.keys(root?.dependencies || {}),
           ...Object.keys(root?.devDependencies || {}),

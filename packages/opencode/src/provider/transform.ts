@@ -325,11 +325,13 @@ function normalizeMessages(
     const field = model.capabilities.interleaved.field
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
-        const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
-        const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+        const reasoningParts = msg.content.filter((part) => part.type === "reasoning")
+        const reasoningText = reasoningParts
+          .map((part) => ("text" in part ? part.text : ""))
+          .join("")
 
         // Filter out reasoning parts from content
-        const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
+        const filteredContent = msg.content.filter((part) => part.type !== "reasoning")
 
         // Include reasoning_content | reasoning_details directly on the message for all assistant messages.
         // Always set the field even when empty — some providers (e.g. DeepSeek) may return empty
@@ -445,10 +447,10 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
 
 function mapProviderOptions(
   msgs: ModelMessage[],
-  transform: (options: Record<string, any> | undefined) => Record<string, any> | undefined,
+  transform: (options: Record<string, unknown> | undefined) => Record<string, unknown> | undefined,
 ) {
   return msgs.map((msg) => {
-    if (!Array.isArray(msg.content)) return { ...msg, providerOptions: transform(msg.providerOptions) }
+    if (!Array.isArray(msg.content)) return { ...msg, providerOptions: transform(msg.providerOptions) } as typeof msg
     return {
       ...msg,
       providerOptions: transform(msg.providerOptions),
@@ -485,7 +487,7 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
   // Remap providerOptions keys from stored providerID to expected SDK key
   const key = sdkKey(model.api.npm)
   if (key && key !== model.providerID) {
-    const remap = (opts: Record<string, any> | undefined) => {
+    const remap = (opts: Record<string, unknown> | undefined) => {
       if (!opts) return opts
       if (!(model.providerID in opts)) return opts
       const result = { ...opts }
@@ -506,7 +508,7 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
     )
   ) {
     msgs = mapProviderOptions(msgs, (options) => {
-      if (!options?.[key] || !("itemId" in options[key])) return options
+      if (!options?.[key] || typeof options[key] !== "object" || !("itemId" in options[key])) return options
       const metadata = { ...options[key] }
       delete metadata.itemId
       return { ...options, [key]: metadata }
@@ -702,11 +704,11 @@ function googleThinkingBudgetMax(apiId: string) {
 
 // SAP's Zod schema drops unknown top-level keys; reasoning controls survive
 // only via `modelParams` (catchall), forwarded verbatim by the SAP SDKs.
-function wrapInSapModelParams(variants: Record<string, Record<string, any>>): Record<string, Record<string, any>> {
+function wrapInSapModelParams(variants: Record<string, Record<string, unknown>>): Record<string, Record<string, unknown>> {
   return Object.fromEntries(Object.entries(variants).map(([k, v]) => [k, { modelParams: v }]))
 }
 
-function googleThinkingVariants(model: Provider.Model): Record<string, Record<string, any>> {
+function googleThinkingVariants(model: Provider.Model): Record<string, Record<string, unknown>> {
   const id = model.api.id.toLowerCase()
   if (id.includes("2.5")) {
     return {
@@ -724,7 +726,7 @@ function googleThinkingVariants(model: Provider.Model): Record<string, Record<st
   )
 }
 
-export function variants(model: Provider.Model): Record<string, Record<string, any>> {
+export function variants(model: Provider.Model): Record<string, Record<string, unknown>> {
   if (!model.capabilities.reasoning) return {}
 
   const id = model.id.toLowerCase()
@@ -1157,9 +1159,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 export function options(input: {
   model: Provider.Model
   sessionID: string
-  providerOptions?: Record<string, any>
-}): Record<string, any> {
-  const result: Record<string, any> = {}
+  providerOptions?: Record<string, unknown>
+}): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
 
   if (
     input.model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
@@ -1220,7 +1222,7 @@ export function options(input: {
         includeThoughts: true,
       }
       if (input.model.api.id.includes("gemini-3")) {
-        result["thinkingConfig"]["thinkingLevel"] = "high"
+        ;(result["thinkingConfig"] as Record<string, unknown>)["thinkingLevel"] = "high"
       }
     }
   }
@@ -1355,7 +1357,7 @@ const SLUG_OVERRIDES: Record<string, string> = {
   amazon: "bedrock",
 }
 
-export function providerOptions(model: Provider.Model, options: { [x: string]: any }) {
+export function providerOptions(model: Provider.Model, options: { [x: string]: unknown }) {
   const usesOpenAIReasoningGate =
     model.api.npm === "@ai-sdk/openai" ||
     model.api.npm === "@ai-sdk/azure" ||
@@ -1379,15 +1381,15 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
     const rest = Object.fromEntries(Object.entries(normalized).filter(([k]) => k !== "gateway"))
     const has = Object.keys(rest).length > 0
 
-    const result: Record<string, any> = {}
-    if (gateway !== undefined) result.gateway = gateway
+    const result: Record<string, Record<string, unknown>> = {}
+    if (gateway !== undefined) result.gateway = gateway as Record<string, unknown>
 
     if (has) {
       if (slug) {
         // Route model-specific options under the provider slug
         result[slug] = rest
       } else if (gateway && typeof gateway === "object" && !Array.isArray(gateway)) {
-        result.gateway = { ...gateway, ...rest }
+        result.gateway = { ...(gateway as Record<string, unknown>), ...rest }
       } else {
         result.gateway = rest
       }
@@ -1553,7 +1555,7 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
 
   // Convert integer enums to string enums for Google/Gemini
   if (model.providerID === "google" || model.api.id.includes("gemini")) {
-    const isPlainObject = (node: unknown): node is Record<string, any> =>
+    const isPlainObject = (node: unknown): node is Record<string, unknown> =>
       typeof node === "object" && node !== null && !Array.isArray(node)
     const hasCombiner = (node: unknown) =>
       isPlainObject(node) && (Array.isArray(node.anyOf) || Array.isArray(node.oneOf) || Array.isArray(node.allOf))
@@ -1578,7 +1580,7 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
       ].some((key) => key in node)
     }
 
-    const sanitizeGemini = (obj: any): any => {
+    const sanitizeGemini = (obj: unknown): unknown => {
       if (obj === null || typeof obj !== "object") {
         return obj
       }
@@ -1587,7 +1589,7 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
         return obj.map(sanitizeGemini)
       }
 
-      const result: any = {}
+      const result: Record<string, unknown> = {}
       for (const [key, value] of Object.entries(obj)) {
         if (key === "enum" && Array.isArray(value)) {
           // Convert all enum values to strings
@@ -1623,7 +1625,7 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
 
       // Filter required array to only include fields that exist in properties
       if (result.type === "object" && result.properties && Array.isArray(result.required)) {
-        result.required = result.required.filter((field: any) => field in result.properties)
+        result.required = result.required.filter((field) => typeof field === "string" && field in (result.properties as Record<string, unknown>))
       }
 
       if (result.type === "array" && !hasCombiner(result)) {
@@ -1645,7 +1647,7 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
       return result
     }
 
-    schema = sanitizeGemini(schema)
+    schema = sanitizeGemini(schema) as JSONSchema7
   }
 
   return schema

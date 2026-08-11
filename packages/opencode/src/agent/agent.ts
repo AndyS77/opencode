@@ -5,6 +5,7 @@ import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Provider } from "@/provider/provider"
 
 import { generateObject, streamObject, type ModelMessage } from "ai"
+import type { SharedV3ProviderOptions } from "@ai-sdk/provider"
 import { Truncate } from "@/tool/truncate"
 import { Auth } from "../auth"
 import { ProviderTransform } from "@/provider/transform"
@@ -422,7 +423,7 @@ const layer = Layer.effect(
               providerOptions: ProviderTransform.providerOptions(resolved, {
                 instructions: system.join("\n"),
                 store: false,
-              }),
+              }) as SharedV3ProviderOptions,
               onError: () => {},
             })
             for await (const part of result.fullStream) {

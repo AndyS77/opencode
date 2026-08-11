@@ -102,9 +102,12 @@ type BundledSDK = {
   languageModel(modelId: string): LanguageModelV3
   chat?: (modelId: string) => LanguageModelV3
   responses?: (modelId: string) => LanguageModelV3
+  messages?: (modelId: string) => LanguageModelV3
+  workflowChat?: (modelId: string, options?: Record<string, unknown>) => LanguageModelV3
+  agenticChat?: (modelId: string, options?: Record<string, unknown>) => LanguageModelV3
 }
 
-const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>> = {
+const BUNDLED_PROVIDERS: Record<string, () => Promise<unknown>> = {
   "@ai-sdk/amazon-bedrock": () => import("@ai-sdk/amazon-bedrock").then((m) => m.createAmazonBedrock),
   "@ai-sdk/amazon-bedrock/mantle": () => import("@ai-sdk/amazon-bedrock/mantle").then((m) => m.createBedrockMantle),
   "@ai-sdk/anthropic": () => import("@ai-sdk/anthropic").then((m) => m.createAnthropic),
@@ -133,14 +136,14 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
   "venice-ai-sdk-provider": () => import("venice-ai-sdk-provider").then((m) => m.createVenice),
 }
 
-type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>, model?: Model) => Promise<any>
-type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
+type CustomModelLoader = (sdk: BundledSDK, modelID: string, options?: Record<string, unknown>, model?: Model) => Promise<unknown>
+type CustomVarsLoader = (options: Record<string, unknown>) => Record<string, string>
 type CustomDiscoverModels = () => Promise<Record<string, Model>>
 type CustomLoader = (provider: Info) => Effect.Effect<{
   autoload: boolean
   getModel?: CustomModelLoader
   vars?: CustomVarsLoader
-  options?: Record<string, any>
+  options?: Record<string, unknown>
   discoverModels?: CustomDiscoverModels
 }>
 
@@ -151,7 +154,7 @@ type CustomDep = {
   get: (key: string) => Effect.Effect<string | undefined>
 }
 
-function selectAzureLanguageModel(sdk: any, modelID: string, useChat: boolean) {
+function selectAzureLanguageModel(sdk: BundledSDK, modelID: string, useChat: boolean) {
   if (useChat && sdk.chat) return sdk.chat(modelID)
   if (sdk.responses) return sdk.responses(modelID)
   if (sdk.messages) return sdk.messages(modelID)
@@ -202,38 +205,38 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
     openai: () =>
       Effect.succeed({
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          return sdk.responses(modelID)
+        async getModel(sdk: BundledSDK, modelID: string, _options?: Record<string, unknown>) {
+          return sdk.responses!(modelID)
         },
         options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
       }),
     meta: () =>
       Effect.succeed({
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          return sdk.responses(modelID)
+        async getModel(sdk: BundledSDK, modelID: string, _options?: Record<string, unknown>) {
+          return sdk.responses!(modelID)
         },
       }),
     xai: () =>
       Effect.succeed({
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
-          return sdk.responses(modelID)
+        async getModel(sdk: BundledSDK, modelID: string, _options?: Record<string, unknown>) {
+          return sdk.responses!(modelID)
         },
         options: {},
       }),
     "github-copilot": () =>
       Effect.succeed({
         autoload: false,
-        async getModel(sdk: any, modelID: string, _options?: Record<string, any>, model?: Model) {
+        async getModel(sdk: BundledSDK, modelID: string, _options?: Record<string, unknown>, model?: Model) {
           if (sdk.responses === undefined && sdk.chat === undefined) return sdk.languageModel(modelID)
           if (model && "endpoint" in model.api) {
             if (model.api.endpoint === "responses" && sdk.responses) return sdk.responses(modelID)
             if (model.api.endpoint === "chat" && sdk.chat) return sdk.chat(modelID)
           }
           const match = /^gpt-(\d+)/.exec(modelID)
-          if (match && Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")) return sdk.responses(modelID)
-          return sdk.chat(modelID)
+          if (match && Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")) return sdk.responses!(modelID)
+          return sdk.chat!(modelID)
         },
         options: {},
       }),
@@ -261,7 +264,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+        async getModel(sdk: BundledSDK, modelID: string, options?: Record<string, unknown>) {
           return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
         },
         options: {
@@ -281,7 +284,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const resourceName = yield* dep.get("AZURE_COGNITIVE_SERVICES_RESOURCE_NAME")
       return {
         autoload: false,
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+        async getModel(sdk: BundledSDK, modelID: string, options?: Record<string, unknown>) {
           return selectAzureLanguageModel(sdk, modelID, Boolean(options?.["useCompletionUrls"]))
         },
         options: {
@@ -339,7 +342,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       const { fromNodeProviderChain } = yield* Effect.promise(() => import("@aws-sdk/credential-providers"))
 
-      const providerOptions: Record<string, any> = {
+      const providerOptions: Record<string, unknown> = {
         region: defaultRegion,
       }
 
@@ -361,10 +364,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: true,
         options: providerOptions,
-        vars(options: Record<string, any>) {
+        vars(options: Record<string, unknown>) {
           return { AWS_REGION: options.region ?? defaultRegion }
         },
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>, model?: Model) {
+        async getModel(sdk: BundledSDK, modelID: string, options?: Record<string, unknown>, model?: Model) {
           if (model?.api.npm === "@ai-sdk/amazon-bedrock/mantle") return selectBedrockMantleLanguageModel(sdk, modelID)
 
           // Skip region prefixing if model already has a cross-region inference profile prefix
@@ -518,7 +521,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!autoload) return { autoload: false }
       return {
         autoload: true,
-        vars(_options: Record<string, any>) {
+        vars(_options: Record<string, unknown>) {
           const endpoint = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`
           return {
             ...(project && { GOOGLE_VERTEX_PROJECT: project }),
@@ -541,7 +544,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             return fetch(input, { ...init, headers })
           },
         },
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk: BundledSDK, modelID: string) {
           const id = String(modelID).trim()
           return sdk.languageModel(id)
         },
@@ -561,7 +564,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           location,
           ...(baseURL && { baseURL }),
         },
-        async getModel(sdk: any, modelID) {
+        async getModel(sdk: BundledSDK, modelID) {
           const id = String(modelID).trim()
           return sdk.languageModel(id)
         },
@@ -586,8 +589,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       return {
         autoload: !!envServiceKey,
         options: envServiceKey ? { deploymentId, resourceGroup } : {},
-        async getModel(sdk: any, modelID: string) {
-          return sdk(modelID)
+        async getModel(sdk: BundledSDK, modelID: string) {
+          return (sdk as unknown as (modelId: string) => LanguageModelV3)(modelID)
         },
       }
     }),
@@ -637,23 +640,23 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           aiGatewayHeaders,
           featureFlags,
         },
-        async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
+        async getModel(sdk: BundledSDK, modelID: string, options?: Record<string, unknown>) {
           if (modelID.startsWith("duo-workflow-")) {
             const workflowRef = typeof options?.workflowRef === "string" ? options.workflowRef : undefined
             // Use the static mapping if it exists, otherwise use duo-workflow with selectedModelRef
             const sdkModelID = isWorkflowModel(modelID) ? modelID : "duo-workflow"
             const workflowDefinition =
               typeof options?.workflowDefinition === "string" ? options.workflowDefinition : undefined
-            const model = sdk.workflowChat(sdkModelID, {
+            const model = sdk.workflowChat!(sdkModelID, {
               featureFlags,
               workflowDefinition,
-            })
+            }) as LanguageModelV3 & { selectedModelRef?: string }
             if (workflowRef) {
               model.selectedModelRef = workflowRef
             }
             return model
           }
-          return sdk.agenticChat(modelID, {
+          return sdk.agenticChat!(modelID, {
             aiGatewayHeaders,
             featureFlags,
           })
@@ -754,7 +757,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             "User-Agent": `opencode/${InstallationVersion} cloudflare-workers-ai (${os.platform()} ${os.release()}; ${os.arch()})`,
           },
         },
-        async getModel(sdk: any, modelID: string) {
+        async getModel(sdk: BundledSDK, modelID: string) {
           return sdk.languageModel(modelID)
         },
         vars(_options) {
@@ -833,7 +836,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       return {
         autoload: true,
-        async getModel(_sdk: any, modelID: string, _options?: Record<string, any>) {
+        async getModel(_sdk: unknown, modelID: string, _options?: Record<string, unknown>) {
           // Model IDs use Unified API format: provider/model (e.g., "anthropic/claude-sonnet-4-5")
           return aigateway(unified(modelID))
         },
@@ -890,7 +893,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
 
       const baseURL = `https://${account}.snowflakecomputing.com/api/v2/cortex/v1`
 
-      const options: Record<string, any> = { baseURL, apiKey: token }
+      const options: Record<string, unknown> = { baseURL, apiKey: token }
 
       // Only skip provider-level fetch when the token is from OAuth with no override.
       // For OAuth tokens, the plugin auth loader's combined fetch handles
@@ -1557,7 +1560,7 @@ const layer = Layer.effect(
 
           const options = yield* Effect.promise(() =>
             plugin.auth!.loader!(
-              () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as any,
+              () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as Promise<Auth.Info>,
               toPublicInfo(database[plugin.auth!.provider]),
             ),
           )
@@ -1740,7 +1743,7 @@ const layer = Layer.effect(
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
 
-        options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
+        options["fetch"] = async (input: RequestInfo | URL, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
@@ -1769,11 +1772,11 @@ const layer = Layer.effect(
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
         if (bundledLoader) {
-          const factory = await bundledLoader()
+          const factory = (await bundledLoader()) as (opts: Record<string, unknown>) => unknown
           const loaded = factory({
             name: model.providerID,
             ...options,
-          })
+          }) as BundledSDK
           s.sdk.set(key, loaded)
           return loaded as SDK
         }
@@ -1796,7 +1799,7 @@ const layer = Layer.effect(
         const loaded = fn({
           name: model.providerID,
           ...options,
-        })
+        }) as BundledSDK
         s.sdk.set(key, loaded)
         return loaded as SDK
       } catch (e) {
@@ -1844,7 +1847,7 @@ const layer = Layer.effect(
           const sdk = await resolveSDK(model, s, envs)
           const language = s.modelLoaders[model.providerID]
             ? await s.modelLoaders[model.providerID](
-                sdk,
+                sdk as BundledSDK,
                 model.api.id,
                 {
                   ...provider.options,
@@ -1853,7 +1856,7 @@ const layer = Layer.effect(
                 model,
               )
             : sdk.languageModel(model.api.id)
-          s.models.set(key, language)
+          s.models.set(key, language as LanguageModelV3)
           return language
         },
         (cause) =>
@@ -1979,7 +1982,7 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel } as Interface)
   }),
 )
 

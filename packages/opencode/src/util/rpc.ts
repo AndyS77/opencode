@@ -1,12 +1,12 @@
 type Definition = {
-  [method: string]: (input: any) => any
+  [method: string]: (input: never) => unknown
 }
 
 export function listen(rpc: Definition) {
   onmessage = async (evt) => {
     const parsed = JSON.parse(evt.data)
     if (parsed.type === "rpc.request") {
-      const result = await rpc[parsed.method](parsed.input)
+      const result = await rpc[parsed.method](parsed.input as never)
       postMessage(JSON.stringify({ type: "rpc.result", result, id: parsed.id }))
     }
   }
@@ -16,15 +16,15 @@ export function emit(event: string, data: unknown) {
   postMessage(JSON.stringify({ type: "rpc.event", event, data }))
 }
 
-export function client<T extends Definition>(target: {
+export function client<T extends Record<string, (...args: never[]) => unknown>>(target: {
   postMessage: (data: string) => void | null
-  onmessage: ((this: Worker, ev: MessageEvent<any>) => any) | null
+  onmessage: ((this: Worker, ev: MessageEvent<unknown>) => void) | null
 }) {
-  const pending = new Map<number, (result: any) => void>()
-  const listeners = new Map<string, Set<(data: any) => void>>()
+  const pending = new Map<number, (result: unknown) => void>()
+  const listeners = new Map<string, Set<(data: unknown) => void>>()
   let id = 0
   target.onmessage = async (evt) => {
-    const parsed = JSON.parse(evt.data)
+    const parsed = JSON.parse(evt.data as string)
     if (parsed.type === "rpc.result") {
       const resolve = pending.get(parsed.id)
       if (resolve) {
@@ -45,7 +45,7 @@ export function client<T extends Definition>(target: {
     call<Method extends keyof T>(method: Method, input: Parameters<T[Method]>[0]): Promise<ReturnType<T[Method]>> {
       const requestId = id++
       return new Promise((resolve) => {
-        pending.set(requestId, resolve)
+        pending.set(requestId, resolve as (result: unknown) => void)
         target.postMessage(JSON.stringify({ type: "rpc.request", method, input, id: requestId }))
       })
     },
@@ -55,9 +55,9 @@ export function client<T extends Definition>(target: {
         handlers = new Set()
         listeners.set(event, handlers)
       }
-      handlers.add(handler)
+      handlers.add(handler as (data: unknown) => void)
       return () => {
-        handlers!.delete(handler)
+        handlers!.delete(handler as (data: unknown) => void)
       }
     },
   }

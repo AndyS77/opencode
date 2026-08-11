@@ -102,7 +102,7 @@ describe("cf-ai-gateway end-to-end (regression: #24432)", () => {
     //   -> @ai-sdk/openai-compatible reads it as compatibleOptions
     //   -> emits body.reasoning_effort
     //   -> ai-gateway-provider wraps the body and forwards to gateway.ai.cloudflare.com
-    const opts = ProviderTransform.providerOptions(cfModel("openai/gpt-5.4"), { reasoningEffort: "xhigh" })
+    const opts = ProviderTransform.providerOptions(cfModel("openai/gpt-5.4"), { reasoningEffort: "xhigh" }) as ProviderOptions
     expect(opts).toEqual({ openaiCompatible: { reasoningEffort: "xhigh" } })
 
     const upstream = await callThroughGateway("openai/gpt-5.4", opts)
@@ -116,7 +116,7 @@ describe("cf-ai-gateway end-to-end (regression: #24432)", () => {
     const variants = ProviderTransform.variants(cfModel("openai/gpt-5.4"))
     expect(variants.xhigh).toEqual({ reasoningEffort: "xhigh" })
 
-    const opts = ProviderTransform.providerOptions(cfModel("openai/gpt-5.4"), variants.xhigh)
+    const opts = ProviderTransform.providerOptions(cfModel("openai/gpt-5.4"), variants.xhigh) as ProviderOptions
     const upstream = await callThroughGateway("openai/gpt-5.4", opts)
     expect(upstream?.reasoning_effort).toBe("xhigh")
   })
