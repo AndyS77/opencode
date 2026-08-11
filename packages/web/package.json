@@ -4,6 +4,7 @@
   "license": "MIT",
   "version": "1.18.16",
   "scripts": {
+    "lint": "oxlint src",
     "dev": "astro dev",
     "dev:remote": "VITE_API_URL=https://api.opencode.ai astro dev",
     "start": "astro dev",

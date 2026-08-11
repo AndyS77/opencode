@@ -6,6 +6,7 @@
   "license": "MIT",
   "private": true,
   "scripts": {
+    "lint": "oxlint src",
     "typecheck": "tsgo --noEmit"
   },
   "exports": {

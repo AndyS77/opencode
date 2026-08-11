@@ -8,6 +8,7 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
+    "lint": "oxlint src",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Wrapper: calls oc-agents commit-msg hook
+HOOKS_DIR="C:/Users/andrseli/.config/opencode/hooks"
+if [ -f "$HOOKS_DIR/commit-msg" ]; then
+  sh "$HOOKS_DIR/commit-msg" "$@" || exit $?
+fi

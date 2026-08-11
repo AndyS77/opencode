@@ -8,6 +8,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "lint": "oxlint src",
     "test": "bun test --timeout 5000",
     "typecheck": "tsgo --noEmit"
   },

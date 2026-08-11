@@ -26,6 +26,9 @@ target
 .scripts
 .direnv/
 
+# Local-only gitignore (machine-specific, not shared)
+.gitignore_local
+
 # Local dev files
 opencode-dev
 UPCOMING_CHANGELOG.md

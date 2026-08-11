@@ -1,0 +1,6 @@
+#!/bin/sh
+# Wrapper: calls oc-agents post-merge hook
+HOOKS_DIR="C:/Users/andrseli/.config/opencode/hooks"
+if [ -f "$HOOKS_DIR/post-merge" ]; then
+  sh "$HOOKS_DIR/post-merge" "$@" || exit $?
+fi

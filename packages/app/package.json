@@ -13,6 +13,7 @@
     "./index.css": "./src/index.css"
   },
   "scripts": {
+    "lint": "oxlint src",
     "typecheck": "tsgo -b",
     "typecheck:e2e": "tsgo -p e2e/tsconfig.json",
     "start": "vite",
