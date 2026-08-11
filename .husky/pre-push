@@ -1,5 +1,12 @@
 #!/bin/sh
 set -e
+
+# oc-agents pre-push hook (governance checks)
+HOOKS_DIR="C:/Users/andrseli/.config/opencode/hooks"
+if [ -f "$HOOKS_DIR/pre-push" ]; then
+  sh "$HOOKS_DIR/pre-push" "$@" || exit $?
+fi
+
 # Check if bun version matches package.json
 # keep in sync with packages/script/src/index.ts semver qualifier
 bun -e '

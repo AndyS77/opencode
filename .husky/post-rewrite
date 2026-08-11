@@ -1,0 +1,6 @@
+#!/bin/sh
+# Wrapper: calls oc-agents post-rewrite hook
+HOOKS_DIR="C:/Users/andrseli/.config/opencode/hooks"
+if [ -f "$HOOKS_DIR/post-rewrite" ]; then
+  sh "$HOOKS_DIR/post-rewrite" "$@" || exit $?
+fi
