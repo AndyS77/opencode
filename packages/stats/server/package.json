@@ -10,6 +10,7 @@
     ".": "./src/server.ts"
   },
   "scripts": {
+    "lint": "oxlint src",
     "start": "bun src/server.ts",
     "typecheck": "tsgo --noEmit"
   },

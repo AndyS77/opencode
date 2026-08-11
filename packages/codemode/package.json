@@ -10,6 +10,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "lint": "oxlint src",
     "typecheck": "tsgo --noEmit",
     "test": "bun test"
   },

@@ -6,6 +6,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "lint": "oxlint src",
     "typecheck": "tsgo --noEmit",
     "dev": "vite dev --host 0.0.0.0",
     "build": "vite build",

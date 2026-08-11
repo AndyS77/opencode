@@ -23,6 +23,7 @@
     "./*": "./src/*"
   },
   "scripts": {
+    "lint": "oxlint src",
     "db": "sst shell drizzle-kit",
     "db-dev": "sst shell --stage dev -- drizzle-kit",
     "db-prod": "sst shell --stage production -- drizzle-kit",

@@ -10,6 +10,7 @@
     "email": "hello@opencode.ai"
   },
   "scripts": {
+    "lint": "oxlint src",
     "typecheck": "tsgo -b",
     "predev": "bun ./scripts/predev.ts",
     "dev": "electron-vite dev",

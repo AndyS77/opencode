@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "lint": "oxlint src",
     "test": "bun test",
     "typecheck": "tsgo --noEmit",
     "build": "bun ./script/build.ts"

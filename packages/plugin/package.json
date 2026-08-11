@@ -5,6 +5,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "lint": "oxlint src",
     "typecheck": "tsgo --noEmit",
     "build": "tsc"
   },

@@ -4,6 +4,7 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "lint": "oxlint src",
     "typecheck": "tsgo --noEmit",
     "dev": "sst shell --stage production -- vite dev"
   },

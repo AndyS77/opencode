@@ -27,6 +27,7 @@
     "access": "public"
   },
   "scripts": {
+    "lint": "oxlint src",
     "test": "bun test --timeout 30000 --only-failures",
     "typecheck": "tsgo --noEmit",
     "build": "bun ./script/build.ts",
