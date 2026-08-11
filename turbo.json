@@ -4,6 +4,7 @@
   "globalPassThroughEnv": ["CI", "OPENCODE_DISABLE_SHARE"],
   "tasks": {
     "typecheck": {},
+    "lint": {},
     "build": {
       "dependsOn": [],
       "outputs": ["dist/**"]
