@@ -242,7 +242,7 @@ const layer = Layer.effect(
       const url = remoteURL(mcp.url)
       if (!url) {
         return {
-          client: undefined as MCPClient | undefined,
+        client: undefined,
           status: { status: "failed" as const, error: `Invalid MCP URL for "${key}"` },
         }
       }
@@ -333,7 +333,7 @@ const layer = Layer.effect(
 
       return {
         client: undefined as MCPClient | undefined,
-        status: (lastStatus ?? { status: "failed", error: "Unknown error" }) as Status,
+        status: (lastStatus ?? { status: "failed", error: "Unknown error" }),
       }
     })
 

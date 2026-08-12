@@ -307,7 +307,7 @@ function open(state: State): string {
         },
       },
     },
-  } as Event)
+  } satisfies Event)
   return id
 }
 
@@ -332,7 +332,7 @@ async function emitText(state: State, body: string, signal?: AbortSignal): Promi
         },
       },
     },
-  } as Event)
+  } satisfies Event)
 
   let next = ""
   for (const item of split(body)) {
@@ -350,7 +350,7 @@ async function emitText(state: State, body: string, signal?: AbortSignal): Promi
         field: "text",
         delta: item,
       },
-    } as Event)
+    } satisfies Event)
     await wait(45, signal)
   }
 
@@ -371,7 +371,7 @@ async function emitText(state: State, body: string, signal?: AbortSignal): Promi
         },
       },
     },
-  } as Event)
+  } satisfies Event)
 }
 
 async function emitReasoning(state: State, body: string, signal?: AbortSignal): Promise<void> {
@@ -395,7 +395,7 @@ async function emitReasoning(state: State, body: string, signal?: AbortSignal): 
         },
       },
     },
-  } as Event)
+  } satisfies Event)
 
   let next = ""
   for (const item of split(body)) {
@@ -413,7 +413,7 @@ async function emitReasoning(state: State, body: string, signal?: AbortSignal): 
         field: "text",
         delta: item,
       },
-    } as Event)
+    } satisfies Event)
     await wait(45, signal)
   }
 
@@ -434,7 +434,7 @@ async function emitReasoning(state: State, body: string, signal?: AbortSignal): 
         },
       },
     },
-  } as Event)
+  } satisfies Event)
 }
 
 function make(state: State, tool: string, input: Record<string, unknown>): Ref {
@@ -471,7 +471,7 @@ function startTool(state: State, ref: Ref, metadata: Record<string, unknown> = {
         },
       },
     },
-  } as Event)
+  } satisfies Event)
 }
 
 function askPermission(state: State, item: Permit): void {
@@ -497,7 +497,7 @@ function askPermission(state: State, item: Permit): void {
         callID: item.ref.call,
       },
     },
-  } as Event)
+  } satisfies Event)
 }
 
 function doneTool(
@@ -534,7 +534,7 @@ function doneTool(
         },
       },
     },
-  } as Event)
+  } satisfies Event)
 }
 
 function failTool(state: State, ref: Ref, error: string): void {
@@ -562,7 +562,7 @@ function failTool(state: State, ref: Ref, error: string): void {
         },
       },
     },
-  } as Event)
+  } satisfies Event)
 }
 
 function emitError(state: State, text: string): void {
@@ -1017,7 +1017,7 @@ function emitQuestion(state: State, kind: QuestionKind = "multi"): void {
         callID: ref.call,
       },
     },
-  } as Event)
+  } satisfies Event)
 }
 
 async function emitFmt(state: State, kind: string, body: string, signal?: AbortSignal): Promise<boolean> {
@@ -1259,7 +1259,7 @@ export function createRunDemo(input: Input) {
         sessionID: state.id,
         requestID: input.requestID,
       },
-    } as Event)
+    } satisfies Event)
     failTool(state, ask.ref, "question rejected")
     return true
   }

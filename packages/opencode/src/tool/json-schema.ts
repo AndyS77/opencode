@@ -1,6 +1,6 @@
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { JsonSchema, Schema } from "effect"
-import type * as Tool from "./tool"
+import type { Tool } from "./tool"
 
 type JsonObject = Record<string, unknown>
 const cache = new WeakMap<Schema.Top, JSONSchema7>()

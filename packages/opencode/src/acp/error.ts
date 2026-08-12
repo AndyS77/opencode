@@ -95,3 +95,5 @@ export function toRequestError(error: Error) {
 export function fromUnknownDefect(_defect: unknown, safeMessage = "Internal service failure") {
   return new ServiceFailureError({ safeMessage })
 }
+
+export * as ACPError from "./error"

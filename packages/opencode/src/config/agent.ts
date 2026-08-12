@@ -5,7 +5,7 @@ import { Exit, Schema } from "effect"
 import { Glob } from "@opencode-ai/core/util/glob"
 import { ConfigAgentV1 } from "@opencode-ai/core/v1/config/agent"
 import { configEntryNameFromPath } from "./entry-name"
-import * as ConfigMarkdown from "./markdown"
+import { ConfigMarkdown } from "./markdown"
 import { ConfigParse } from "./parse"
 
 export async function load(dir: string) {

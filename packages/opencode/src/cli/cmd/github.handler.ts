@@ -1,12 +1,12 @@
 import path from "path"
 import { exec } from "child_process"
 import { Filesystem } from "@/util/filesystem"
-import * as prompts from "@clack/prompts"
+import { intro, isCancel, log, outro, select, spinner } from "@clack/prompts"
 import { map, pipe, sortBy, values } from "remeda"
 import { Octokit } from "@octokit/rest"
 import { graphql } from "@octokit/graphql"
-import * as core from "@actions/core"
-import * as github from "@actions/github"
+import core from "@actions/core"
+import github from "@actions/github"
 import type { Context } from "@actions/github/lib/context"
 import type {
   IssueCommentEvent,
@@ -163,7 +163,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
   yield* Effect.promise(async () => {
     {
       UI.empty()
-      prompts.intro("Install GitHub agent")
+      intro("Install GitHub agent")
       const app = await getAppInfo()
       await installGitHubApp()
 
@@ -193,7 +193,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
           ].join("\n")
         }
 
-        prompts.outro(
+        outro(
           [
             "Next steps:",
             "",
@@ -210,7 +210,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
       async function getAppInfo() {
         const project = ctx.project
         if (project.vcs !== "git") {
-          prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
+          log.error(`Could not find git repository. Please run this command from a git repository.`)
           throw new UI.CancelledError()
         }
 
@@ -220,7 +220,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
         )
         const parsed = parseGitHubRemote(info)
         if (!parsed) {
-          prompts.log.error(`Could not find git repository. Please run this command from a git repository.`)
+          log.error(`Could not find git repository. Please run this command from a git repository.`)
           throw new UI.CancelledError()
         }
         return { owner: parsed.owner, repo: parsed.repo, root: ctx.worktree }
@@ -233,7 +233,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
           openai: 2,
           google: 3,
         }
-        let provider = await prompts.select({
+        let provider = await select({
           message: "Select provider",
           maxItems: 8,
           options: pipe(
@@ -251,15 +251,15 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
           ),
         })
 
-        if (prompts.isCancel(provider)) throw new UI.CancelledError()
+        if (isCancel(provider)) throw new UI.CancelledError()
 
         return provider
       }
 
       async function promptModel() {
-        const providerData = providers[provider]!
+        const providerData = providers[provider]
 
-        const model = await prompts.select({
+        const model = await select({
           message: "Select model",
           maxItems: 8,
           options: pipe(
@@ -273,12 +273,12 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
           ),
         })
 
-        if (prompts.isCancel(model)) throw new UI.CancelledError()
+        if (isCancel(model)) throw new UI.CancelledError()
         return model
       }
 
       async function installGitHubApp() {
-        const s = prompts.spinner()
+        const s = spinner()
         s.start("Installing GitHub app")
 
         // Get installation
@@ -296,7 +296,7 @@ export const githubInstall = Effect.fn("Cli.github.install")(function* () {
 
         exec(command, (error) => {
           if (error) {
-            prompts.log.warn(`Could not open browser. Please visit: ${url}`)
+            log.warn(`Could not open browser. Please visit: ${url}`)
           }
         })
 
@@ -369,7 +369,7 @@ jobs:
           model: ${provider}/${model}`,
         )
 
-        prompts.log.success(`Added workflow file: "${WORKFLOW_FILE}"`)
+        log.success(`Added workflow file: "${WORKFLOW_FILE}"`)
       }
     }
   })
@@ -1185,14 +1185,14 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
           return await octoRest.rest.reactions.createForPullRequestReviewComment({
             owner,
             repo,
-            comment_id: triggerCommentId!,
+            comment_id: triggerCommentId,
             content: AGENT_REACTION,
           })
         }
         return await octoRest.rest.reactions.createForIssueComment({
           owner,
           repo,
-          comment_id: triggerCommentId!,
+          comment_id: triggerCommentId,
           content: AGENT_REACTION,
         })
       }
@@ -1212,7 +1212,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
           const reactions = await octoRest.rest.reactions.listForPullRequestReviewComment({
             owner,
             repo,
-            comment_id: triggerCommentId!,
+            comment_id: triggerCommentId,
             content: AGENT_REACTION,
           })
 
@@ -1222,7 +1222,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
           return await octoRest.rest.reactions.deleteForPullRequestComment({
             owner,
             repo,
-            comment_id: triggerCommentId!,
+            comment_id: triggerCommentId,
             reaction_id: eyesReaction.id,
           })
         }
@@ -1230,7 +1230,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         const reactions = await octoRest.rest.reactions.listForIssueComment({
           owner,
           repo,
-          comment_id: triggerCommentId!,
+          comment_id: triggerCommentId,
           content: AGENT_REACTION,
         })
 
@@ -1240,7 +1240,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         return await octoRest.rest.reactions.deleteForIssueComment({
           owner,
           repo,
-          comment_id: triggerCommentId!,
+          comment_id: triggerCommentId,
           reaction_id: eyesReaction.id,
         })
       }

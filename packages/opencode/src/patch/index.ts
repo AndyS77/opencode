@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
-import * as path from "path"
+import path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import * as Bom from "../util/bom"
+import { Bom } from "../util/bom"
 
 export const PatchSchema = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -263,7 +263,7 @@ export function maybeParseApplyPatch(
     } catch (error) {
       return {
         type: MaybeApplyPatch.PatchParseError,
-        error: error as Error,
+        error: error instanceof Error ? error : new Error(String(error)),
       }
     }
   }
@@ -288,7 +288,7 @@ export function maybeParseApplyPatch(
       } catch (error) {
         return {
           type: MaybeApplyPatch.PatchParseError,
-          error: error as Error,
+          error: error instanceof Error ? error : new Error(String(error)),
         }
       }
     }
@@ -654,7 +654,7 @@ export const maybeParseApplyPatchVerified = Effect.fn("Patch.maybeParseApplyPatc
             } catch (error) {
               return {
                 type: MaybeApplyPatchVerified.CorrectnessError,
-                error: error as Error,
+                error: error instanceof Error ? error : new Error(String(error)),
               } satisfies MaybeApplyPatchVerifiedResult
             }
             break

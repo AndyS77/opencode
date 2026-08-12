@@ -9,7 +9,7 @@ import { ShareNext } from "@/share/share-next"
 import { Vcs } from "@/project/vcs"
 import { Snapshot } from "@/snapshot"
 import { Config } from "@/config/config"
-import * as Observability from "@opencode-ai/core/observability"
+import { Observability } from "@opencode-ai/core/observability"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 
 export const BootstrapLayer = AppNodeBuilder.build(

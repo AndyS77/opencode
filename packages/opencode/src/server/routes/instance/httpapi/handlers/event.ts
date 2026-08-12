@@ -3,10 +3,10 @@ import { InstanceState } from "@/effect/instance-state"
 import { GlobalBus } from "@/bus/global"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Effect, Queue } from "effect"
-import * as Stream from "effect/Stream"
+import { Stream } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import * as Sse from "effect/unstable/encoding/Sse"
+import { Sse } from "effect/unstable/encoding"
 import { EventApi } from "../groups/event"
 
 function eventData(data: unknown): Sse.Event {

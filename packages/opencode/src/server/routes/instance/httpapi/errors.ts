@@ -191,3 +191,5 @@ export function notFound(message: string) {
     data: { message },
   })
 }
+
+export * as ApiError from "./errors"

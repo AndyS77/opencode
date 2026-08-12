@@ -21,3 +21,5 @@ export async function createOpencode(options?: ServerOptions) {
     server,
   }
 }
+
+export * as SDK from "./index.js"

@@ -1,5 +1,5 @@
 import fs from "fs"
-import * as tty from "node:tty"
+import tty from "node:tty"
 
 export const INTERACTIVE_INPUT_ERROR = "--mini requires a controlling terminal for input"
 

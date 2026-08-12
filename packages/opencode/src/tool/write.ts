@@ -1,7 +1,7 @@
 import { Schema } from "effect"
-import * as path from "path"
+import path from "path"
 import { Effect } from "effect"
-import * as Tool from "./tool"
+import { Tool } from "./tool"
 import { LSP } from "@/lsp/lsp"
 import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./write.txt"
@@ -13,7 +13,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import * as Bom from "@/util/bom"
+import { Bom } from "@/util/bom"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 

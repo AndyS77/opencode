@@ -35,3 +35,5 @@ export const spinner = () => {
     stop: (msg: string, code?: number) => Effect.sync(() => s.stop(msg, code)),
   }
 }
+
+export * as Prompt from "./prompt"

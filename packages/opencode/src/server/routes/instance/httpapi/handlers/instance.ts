@@ -1,6 +1,6 @@
 import { Agent } from "@/agent/agent"
 import { Command } from "@/command"
-import * as InstanceState from "@/effect/instance-state"
+import { InstanceState } from "@/effect/instance-state"
 import { Format } from "@/format"
 import { Global } from "@opencode-ai/core/global"
 import { LSP } from "@/lsp/lsp"

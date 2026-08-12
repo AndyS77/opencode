@@ -58,3 +58,5 @@ export function wait(workspaceID: WorkspaceV2.ID, state: State, signal?: AbortSi
     yield* Effect.logInfo("state fully synced", { workspaceID, state })
   })
 }
+
+export * as Fence from "./fence"

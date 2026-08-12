@@ -5,7 +5,7 @@ import { Provider } from "@/provider/provider"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Context, Effect, Layer } from "effect"
-import * as Stream from "effect/Stream"
+import { Stream } from "effect"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
 import type { SharedV3ProviderOptions } from "@ai-sdk/provider"
 import type { LLMEvent } from "@opencode-ai/llm"
@@ -25,8 +25,8 @@ import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import * as Option from "effect/Option"
-import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { Option } from "effect"
+import { Tracer } from "@effect/opentelemetry"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
@@ -131,7 +131,7 @@ const live: Layer.Layer<
             return { result: "", error: `Unknown tool: ${toolName}` }
           }
           try {
-            const result = await t.execute!(JSON.parse(argsJson), {
+            const result = await t.execute(JSON.parse(argsJson), {
               toolCallId: _requestID,
               messages: input.messages,
               abortSignal: input.abort,
@@ -177,7 +177,8 @@ const live: Layer.Layer<
             const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
               try {
                 const parsed = JSON.parse(t.args) as Record<string, unknown>
-                const title = (parsed?.title ?? parsed?.name ?? "") as string
+                const rawTitle = parsed?.title ?? parsed?.name ?? ""
+                const title = typeof rawTitle === "string" ? rawTitle : ""
                 return title ? `${t.name}: ${title}` : t.name
               } catch {
                 return t.name
@@ -207,7 +208,7 @@ const live: Layer.Layer<
       }
 
       const tracer = cfg.experimental?.openTelemetry
-        ? Option.getOrUndefined(yield* Effect.serviceOption(OtelTracer.OtelTracer))
+        ? Option.getOrUndefined(yield* Effect.serviceOption(Tracer.OtelTracer))
         : undefined
       const telemetryTracer = tracer
         ? new Proxy(tracer, {

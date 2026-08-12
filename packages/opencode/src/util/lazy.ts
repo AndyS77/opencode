@@ -1,20 +1,17 @@
 export function lazy<T>(fn: () => T) {
-  let value: T | undefined
-  let loaded = false
+  let memo: { value: T } | undefined
 
   const result = (): T => {
-    if (loaded) return value as T
-    value = fn()
-    loaded = true
-    return value as T
+    if (memo) return memo.value
+    memo = { value: fn() }
+    return memo.value
   }
 
   result.reset = () => {
-    loaded = false
-    value = undefined
+    memo = undefined
   }
 
-  result.loaded = () => loaded
+  result.loaded = () => memo !== undefined
 
   return result
 }

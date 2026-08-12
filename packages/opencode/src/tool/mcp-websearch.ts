@@ -94,3 +94,5 @@ export const call = <F extends Schema.Struct.Fields>(
     const body = yield* response.text
     return yield* parseResponse(body)
   })
+
+export * as McpWebSearch from "./mcp-websearch"

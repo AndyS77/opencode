@@ -6,7 +6,7 @@ export function listen(rpc: Definition) {
   onmessage = async (evt) => {
     const parsed = JSON.parse(evt.data)
     if (parsed.type === "rpc.request") {
-      const result = await rpc[parsed.method](parsed.input as never)
+      const result = await rpc[parsed.method](parsed.input)
       postMessage(JSON.stringify({ type: "rpc.result", result, id: parsed.id }))
     }
   }
@@ -24,7 +24,8 @@ export function client<T extends Record<string, (...args: never[]) => unknown>>(
   const listeners = new Map<string, Set<(data: unknown) => void>>()
   let id = 0
   target.onmessage = async (evt) => {
-    const parsed = JSON.parse(evt.data as string)
+    const data = typeof evt.data === "string" ? evt.data : ""
+    const parsed = JSON.parse(data)
     if (parsed.type === "rpc.result") {
       const resolve = pending.get(parsed.id)
       if (resolve) {
@@ -57,7 +58,7 @@ export function client<T extends Record<string, (...args: never[]) => unknown>>(
       }
       handlers.add(handler as (data: unknown) => void)
       return () => {
-        handlers!.delete(handler as (data: unknown) => void)
+        handlers.delete(handler as (data: unknown) => void)
       }
     },
   }

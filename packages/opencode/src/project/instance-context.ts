@@ -1,6 +1,6 @@
 import { LocalContext } from "@/util/local-context"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import type * as Project from "./project"
+import type { Project } from "./project"
 
 export interface InstanceContext {
   directory: string

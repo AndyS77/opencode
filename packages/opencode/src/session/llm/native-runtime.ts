@@ -5,7 +5,7 @@ import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { asSchema, type ModelMessage, type Tool } from "ai"
 import { Cause, Effect, FiberSet, Queue } from "effect"
-import * as Stream from "effect/Stream"
+import { Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import {
   LLMRequest,

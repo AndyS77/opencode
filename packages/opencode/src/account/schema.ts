@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import type * as HttpClientError from "effect/unstable/http/HttpClientError"
+import type { HttpClientError } from "effect/unstable/http"
 
 export const AccountID = Schema.String.pipe(Schema.brand("AccountID"))
 export type AccountID = Schema.Schema.Type<typeof AccountID>

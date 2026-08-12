@@ -18,8 +18,8 @@ import {
 } from "@agentclientprotocol/sdk"
 import { Effect } from "effect"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
-import * as ACPError from "./error"
-import * as ACPService from "./service"
+import { ACPError } from "./error"
+import { ACPService } from "./service"
 
 export function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
   return {

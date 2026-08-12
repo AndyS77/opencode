@@ -6,7 +6,7 @@ import { TuiConfig } from "@opencode-ai/tui/config"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Filesystem } from "@/util/filesystem"
-import * as ConfigPaths from "@/config/paths"
+import { ConfigPaths } from "@/config/paths"
 
 const TUI_SCHEMA_URL = "https://opencode.ai/tui.json"
 

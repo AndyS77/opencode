@@ -9,7 +9,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
 import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
-import * as Project from "./project"
+import { Project } from "./project"
 
 export interface LoadInput {
   directory: string

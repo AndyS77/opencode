@@ -33,7 +33,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import type { AssistantMessage, Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
-import * as ACPError from "./error"
+import { ACPError } from "./error"
 import { buildConfigOptions, parseModelSelection } from "./config-option"
 import { promptContentToParts } from "./content"
 import { Directory } from "./directory"
@@ -740,10 +740,10 @@ async function loadDirectorySnapshot(sdk: OpencodeClient, directory: string) {
         sdk.config.get({ directory }, { throwOnError: true }).catch(() => undefined),
       ),
     ])
-    const providersData = providersResponse.data!
-    const agents = agentsResponse.data!
-    const commandsData = commandsResponse.data!
-    const skills = skillsResponse.data!
+    const providersData = providersResponse.data
+    const agents = agentsResponse.data
+    const commandsData = commandsResponse.data
+    const skills = skillsResponse.data
     const providers = Object.fromEntries(providersData.providers.map((provider) => [provider.id, provider])) as Record<
       ProviderV2.ID,
       Provider.Info
@@ -1103,3 +1103,5 @@ function findProviderID(value: unknown): string | undefined {
   if ("data" in value) return findProviderID(value.data)
   if ("error" in value) return findProviderID(value.error)
 }
+
+export * as ACPService from "./service"
