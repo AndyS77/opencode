@@ -165,6 +165,11 @@ export const layer = Layer.effect(
       }
       yield* Effect.logInfo("config reload executing immediately", { sessionID })
       const execution = yield* prepareExecution(state, current.input, events)
+      yield* store.reload(execution.input).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logError("config reload store.reload failed", { cause: String(cause) }),
+        ),
+      )
       return {
         immediate: true,
         input: current.input,
@@ -275,8 +280,6 @@ function startBlocker(state: State, blockerID: string) {
 function prepareExecution(state: State, input: InstanceStore.LoadInput, events: EventV2.Interface) {
   return Effect.gen(function* () {
     state.pending = false
-    state.active.clear()
-    state.blockers.clear()
     startBlocker(state, "tui-bootstrap")
     state.reloadInFlight = true
     state.reloadInput = input
@@ -294,7 +297,8 @@ function executePending(
   _resume: ResumeFn,
 ) {
   return Effect.gen(function* () {
-    const execution = yield* prepareExecution(state, state.reloadInput ?? fallbackInput, events)
+    const input = state.reloadInput ?? fallbackInput
+    const execution = yield* prepareExecution(state, input, events)
     yield* store.reload(execution.input).pipe(
       Effect.catchCause((cause) =>
         Effect.logError("config reload store.reload failed", { cause: String(cause) }),
@@ -323,11 +327,12 @@ function continueOrDone(
     yield* publish(events, Event.Done, { sessionID: state.resumeSessionID })
     if (state.resumeSessionID) {
       yield* Effect.logInfo("config reload auto-resuming session", { sessionID: state.resumeSessionID })
-      yield* resume(state.resumeSessionID)
+      const sessionID = state.resumeSessionID
+      state.resumeSessionID = undefined
+      yield* resume(sessionID)
     }
   })
 }
-
 function publish<Definition extends EventV2.Definition>(
   events: EventV2.Interface,
   definition: Definition,

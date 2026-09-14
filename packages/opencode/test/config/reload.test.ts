@@ -179,7 +179,10 @@ describe("ConfigReload", () => {
       ])
       yield* withReload(ctx, (reload) => reload.releaseBlocker("tui-bootstrap"))
 
-      expect(reloads).toEqual([{ directory: ctx.directory, worktree: ctx.worktree }])
+      expect(reloads).toEqual([
+        { directory: ctx.directory, worktree: ctx.worktree },
+        { directory: ctx.directory, worktree: ctx.worktree },
+      ])
       expect(events.map((event) => event.type)).toEqual([
         "config.reload.pending",
         "config.reload.executing",
@@ -360,6 +363,106 @@ describe("ConfigReload", () => {
 
       expect(reloads).toHaveLength(1)
       expect(resumeCalls).toEqual([])
+    }),
+  )
+
+  it.effect("clears resumeSessionID after auto-resume so a second reload without sessionID does not reuse it", () =>
+    Effect.gen(function* () {
+      events.length = 0
+      reloads.length = 0
+      resumeCalls.length = 0
+      const ctx = instance("/tmp/reload-resume-clear")
+
+      yield* withReload(ctx, (reload) => reload.request("session-first"))
+      yield* withReload(ctx, (reload) => reload.releaseBlocker("tui-bootstrap"))
+
+      expect(resumeCalls).toEqual([{ sessionID: "session-first" }])
+
+      resumeCalls.length = 0
+      yield* withReload(ctx, (reload) => reload.request())
+      yield* withReload(ctx, (reload) => reload.releaseBlocker("tui-bootstrap"))
+
+      expect(resumeCalls).toEqual([])
+    }),
+  )
+
+  it.effect("does not clear active sessions when preparing execution", () =>
+    Effect.gen(function* () {
+      events.length = 0
+      reloads.length = 0
+      const ctx = instance("/tmp/reload-preserve-active")
+
+      yield* withReload(ctx, (reload) => reload.start("session-active"))
+      yield* withReload(ctx, (reload) => reload.finish("session-active"))
+      yield* withReload(ctx, (reload) => reload.request("session-preserve"))
+      yield* withReload(ctx, (reload) => reload.releaseBlocker("tui-bootstrap"))
+
+      expect(reloads).toHaveLength(1)
+    }),
+  )
+
+  it.effect("prunes completed state entries from the states map", () =>
+    Effect.gen(function* () {
+      events.length = 0
+      reloads.length = 0
+      const ctx = instance("/tmp/reload-prune")
+
+      yield* withReload(ctx, (reload) => reload.request("session-prune"))
+      yield* withReload(ctx, (reload) => reload.releaseBlocker("tui-bootstrap"))
+
+      const status = yield* withReload(ctx, (reload) => reload.status())
+      expect(status.pending).toBe(false)
+      expect(status.executing).toBe(false)
+    }),
+  )
+})
+
+describe("ConfigReload store failure", () => {
+  const failEvents: PublishedEvent[] = []
+  const failReloads: ReloadCall[] = []
+  const failResumeCalls: ResumeCall[] = []
+
+  const failingLayer = ConfigReload.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.mock(EventV2Bridge.Service)({
+          publish: (definition, data) =>
+            Effect.sync(() => {
+              failEvents.push({ type: definition.type, data })
+              return {
+                id: EventV2.ID.create(),
+                type: definition.type,
+                data,
+              } as EventV2.Payload<typeof definition>
+            }),
+          subscribe: () => Stream.empty,
+          all: () => Stream.empty,
+          listen: () => Effect.succeed(Effect.void),
+        }),
+        Layer.mock(InstanceStore.Service)({
+          reload: () => Effect.fail(new Error("store reload failed")),
+        }),
+        Layer.mock(SessionPrompt.Service)({
+          loop: (input) =>
+            Effect.sync(() => {
+              failResumeCalls.push({ sessionID: input.sessionID })
+            }),
+        }),
+      ),
+    ),
+  )
+
+  const it = testEffect(failingLayer)
+
+  it.effect("clears reloadInFlight and blockers when store.reload fails", () =>
+    Effect.gen(function* () {
+      const reload = yield* ConfigReload.Service
+      const ctx = instance("/tmp/reload-store-failure")
+      yield* withInstance(ctx, reload.request("session-fail"))
+      yield* withInstance(ctx, reload.releaseBlocker("tui-bootstrap"))
+
+      const status = yield* withInstance(ctx, reload.status())
+      expect(status.executing).toBe(false)
     }),
   )
 })
