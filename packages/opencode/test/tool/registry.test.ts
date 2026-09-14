@@ -648,4 +648,49 @@ describe("tool.registry", () => {
       expect(result.title).toBe("sync")
     }),
   )
+
+  it.instance("surfaces plugin execute failure as a catchable error, not a defect", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tools = path.join(test.directory, ".opencode", "tools")
+      yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tools, "failing-tool.ts"),
+          [
+            "export default {",
+            "  description: 'failing tool',",
+            "  args: {},",
+            "  execute() {",
+            "    throw new Error('tool exploded')",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "failing-tool")
+      if (!loaded) throw new Error("failing-tool tool was not loaded")
+      const agents = yield* Agent.Service
+      const result = yield* loaded.execute({}, {
+        sessionID: SessionID.make("ses_test"),
+        messageID: MessageID.make("msg_test"),
+        agent: (yield* agents.defaultInfo()).name,
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: () => Effect.void,
+      } satisfies Tool.Context).pipe(
+        Effect.map((v) => ({ _tag: "Right" as const, value: v })),
+        Effect.catchCause((cause) => Effect.succeed({ _tag: "Left" as const, error: String(cause) })),
+      )
+
+      expect(result._tag).toBe("Left")
+      if (result._tag === "Left") {
+        expect(result.error).toContain("tool exploded")
+      }
+    }),
+  )
 })
