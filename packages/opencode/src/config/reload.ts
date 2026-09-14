@@ -68,6 +68,7 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/ConfigReload") {}
 
 type State = {
+  key: string
   pending: boolean
   reloadInFlight: boolean
   reloadInput?: InstanceStore.LoadInput
@@ -107,7 +108,7 @@ export const layer = Layer.effect(
       const state = yield* currentState(states)
       state.active.delete(sessionID)
       yield* Effect.logDebug("config reload session finished current turn", { sessionID })
-      yield* continueOrDone(state, store, events, resume)
+      yield* continueOrDone(state, states, store, events, resume)
     })
 
     const getBootstrapCycle = Effect.fn("ConfigReload.getBootstrapCycle")(function* () {
@@ -128,7 +129,7 @@ export const layer = Layer.effect(
       const state = yield* currentState(states)
       state.blockers.delete(blockerID)
       yield* Effect.logDebug("config reload blocker released", { blockerID })
-      yield* continueOrDone(state, store, events, resume)
+      yield* continueOrDone(state, states, store, events, resume)
     })
 
     const completeBootstrap = Effect.fn("ConfigReload.completeBootstrap")(function* (cycle: number) {
@@ -137,7 +138,7 @@ export const layer = Layer.effect(
       if (!state) return false
       state.blockers.delete("tui-bootstrap")
       yield* Effect.logDebug("config reload bootstrap completed", { cycle })
-      yield* continueOrDone(state, store, events, resume)
+      yield* continueOrDone(state, states, store, events, resume)
       return true
     })
 
@@ -148,7 +149,7 @@ export const layer = Layer.effect(
       if (!state) return false
       state.blockers.delete("tui-bootstrap")
       yield* Effect.logDebug("config reload bootstrap completed", { cycle: input.cycle })
-      yield* continueOrDone(state, store, events, resume)
+      yield* continueOrDone(state, states, store, events, resume)
       return true
     })
 
@@ -167,7 +168,10 @@ export const layer = Layer.effect(
       const execution = yield* prepareExecution(state, current.input, events)
       yield* store.reload(execution.input).pipe(
         Effect.catchCause((cause) =>
-          Effect.logError("config reload store.reload failed", { cause: String(cause) }),
+          Effect.gen(function* () {
+            yield* Effect.logError("config reload store.reload failed", { cause: String(cause) })
+            yield* failExecution(state, events)
+          }),
         ),
       )
       return {
@@ -236,6 +240,7 @@ function getState(states: Map<string, State>, key: string) {
   const existing = states.get(key)
   if (existing) return existing
   const state: State = {
+    key,
     pending: false,
     reloadInFlight: false,
     bootstrapCycle: 0,
@@ -301,14 +306,29 @@ function executePending(
     const execution = yield* prepareExecution(state, input, events)
     yield* store.reload(execution.input).pipe(
       Effect.catchCause((cause) =>
-        Effect.logError("config reload store.reload failed", { cause: String(cause) }),
+        Effect.gen(function* () {
+          yield* Effect.logError("config reload store.reload failed", { cause: String(cause) })
+          yield* failExecution(state, events)
+        }),
       ),
     )
   })
 }
 
+function failExecution(state: State, events: EventV2.Interface) {
+  return Effect.gen(function* () {
+    state.reloadInFlight = false
+    state.pending = false
+    state.blockers.clear()
+    state.reloadInput = undefined
+    state.resumeSessionID = undefined
+    yield* publish(events, Event.Done, {})
+  })
+}
+
 function continueOrDone(
   state: State,
+  states: Map<string, State>,
   store: InstanceStore.Interface,
   events: EventV2.Interface,
   resume: ResumeFn,
@@ -330,6 +350,9 @@ function continueOrDone(
       const sessionID = state.resumeSessionID
       state.resumeSessionID = undefined
       yield* resume(sessionID)
+    }
+    if (!isBlocked(state) && !state.pending && !state.reloadInFlight) {
+      states.delete(state.key)
     }
   })
 }
