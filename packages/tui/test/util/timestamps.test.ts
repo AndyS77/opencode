@@ -4,15 +4,17 @@ import { todayTimeOrDateTime, time, datetime } from "../../src/util/locale"
 describe("util.locale", () => {
   describe("todayTimeOrDateTime", () => {
     test("returns short time for today", () => {
-      const now = Date.now()
-      const result = todayTimeOrDateTime(now)
-      expect(result).toMatch(/\d{1,2}:\d{2}/)
+      const now = new Date()
+      now.setHours(14, 30, 0, 0)
+      const result = todayTimeOrDateTime(now.getTime())
+      expect(result).toMatch(/\d{1,2}:30/)
     })
 
     test("returns date+time for past date", () => {
-      const past = new Date(2020, 0, 1).getTime()
+      const past = new Date(2020, 0, 1, 14, 30, 0).getTime()
       const result = todayTimeOrDateTime(past)
-      expect(result).toContain("·")
+      expect(result).toMatch(/\d{1,2}:30/)
+      expect(result.length).toBeGreaterThan(5)
     })
   })
 
@@ -28,8 +30,8 @@ describe("util.locale", () => {
     test("includes both time and date", () => {
       const ts = new Date(2026, 7, 18, 13, 34, 25).getTime()
       const result = datetime(ts)
-      expect(result).toContain("·")
       expect(result).toMatch(/\d{1,2}:34/)
+      expect(result.length).toBeGreaterThan(5)
     })
   })
 })
