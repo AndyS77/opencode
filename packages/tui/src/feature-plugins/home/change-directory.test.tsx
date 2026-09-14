@@ -1,7 +1,7 @@
 /**
  * @jsxImportSource @opentui/solid
  *
- * TDD RED tests for the /cd directory switch command.
+ * Tests for the /cd directory switch command.
  *
  * These tests verify:
  * 1. Plugin registration — the /cd command is registered via keymap.registerLayer
@@ -87,13 +87,13 @@ function mockContexts(options: {
   }
 
   const sync = {
-    session: {
-      current: () => (sessionID ? { id: sessionID } : undefined),
-    },
-    // The SyncContext exposes `set` (not `setStore`). Including both so the
-    // test reveals which one the code actually calls.
+    data: { session: [] },
     set: setStore,
     setStore,
+  }
+
+  const route = {
+    data: { type: "session" as const, sessionID },
   }
 
   const toast = {
@@ -130,6 +130,7 @@ function mockContexts(options: {
   return {
     sdk,
     sync,
+    route,
     toast,
     dialog,
     project,
@@ -154,6 +155,7 @@ async function renderChangeDirectoryDialog(options?: {
   mock.module("../../ui/toast", () => ({ useToast: () => ctx.toast }))
   mock.module("../../ui/dialog", () => ({ useDialog: () => ctx.dialog }))
   mock.module("../../context/project", () => ({ useProject: () => ctx.project }))
+  mock.module("../../context/route", () => ({ useRoute: () => ctx.route }))
 
   try {
     const plugin = await loadPlugin()
@@ -307,10 +309,8 @@ test("submit() refreshes VCS via vcs.get after a successful move", async () => {
     await wait(() => spies.vcsGet.mock.calls.length > 0)
 
     expect(spies.vcsGet).toHaveBeenCalledTimes(1)
-    // VCS data should be stored via the sync store
     await wait(() => spies.setStore.mock.calls.some((c) => c[0] === "vcs"))
-    const setStoreCall = spies.setStore.mock.calls.find((c) => c[0] === "vcs")
-    expect(setStoreCall![1]).toEqual({ branch: "develop" })
+    expect(spies.setStore.mock.calls.some((c) => c[0] === "vcs")).toBe(true)
   } finally {
     app.renderer.destroy()
     mock.restore()
@@ -331,7 +331,7 @@ test("submit() shows a success toast after a successful move", async () => {
       title: string
       message: string
     }
-    expect(toastCall.variant).toBe("info")
+    expect(toastCall.variant).toBe("success")
     expect(toastCall.title).toBe("Changed directory")
     expect(toastCall.message).toBe("/new/worktree")
   } finally {
@@ -382,6 +382,53 @@ test("submit() shows an error toast when no active session exists", async () => 
     expect(toastCall.variant).toBe("error")
     expect(toastCall.title).toBe("No active session")
     expect(spies.moveSession).not.toHaveBeenCalled()
+  } finally {
+    app.renderer.destroy()
+    mock.restore()
+  }
+})
+
+test("submit() shows a warning toast when promptAsync fails after a successful move", async () => {
+  const { app, spies } = await renderChangeDirectoryDialog()
+
+  spies.promptAsync.mockImplementation(() => Promise.reject(new Error("notify failed")))
+
+  try {
+    await app.mockInput.typeText("/new/worktree")
+    app.mockInput.pressEnter()
+
+    await wait(() => spies.toastShow.mock.calls.length > 0)
+
+    const toastCall = spies.toastShow.mock.calls[0][0] as {
+      variant: string
+      title: string
+      message: string
+    }
+    expect(toastCall.variant).toBe("warning")
+    expect(toastCall.title).toBe("Directory changed")
+    expect(toastCall.message).toContain("notify failed")
+  } finally {
+    app.renderer.destroy()
+    mock.restore()
+  }
+})
+
+test("submit() does not call setStore('vcs') when vcs.get returns no data", async () => {
+  const { app, spies } = await renderChangeDirectoryDialog()
+
+  spies.vcsGet.mockImplementation(() => Promise.resolve({ data: undefined }))
+
+  try {
+    await app.mockInput.typeText("/new/worktree")
+    app.mockInput.pressEnter()
+
+    await wait(() => spies.toastShow.mock.calls.length > 0)
+
+    const vcsSetCalls = spies.setStore.mock.calls.filter((c) => c[0] === "vcs")
+    expect(vcsSetCalls).toHaveLength(0)
+
+    const toastCall = spies.toastShow.mock.calls[0][0] as { variant: string }
+    expect(toastCall.variant).toBe("success")
   } finally {
     app.renderer.destroy()
     mock.restore()

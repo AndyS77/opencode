@@ -24,10 +24,21 @@ const moveSessionLayer = Layer.mock(MoveSession.Service)({
     }),
 })
 
+const agentLayer = Layer.mock(Agent.Service)({
+  get: () =>
+    Effect.succeed({
+      name: "build",
+      mode: "primary" as const,
+      permission: [],
+      options: {},
+    }),
+})
+
 const it = testEffect(
   Layer.mergeAll(
-    LayerNode.compile(LayerNode.group([Truncate.node, Agent.node])),
+    LayerNode.compile(LayerNode.group([Truncate.node])),
     moveSessionLayer,
+    agentLayer,
   ),
 )
 
@@ -61,7 +72,7 @@ describe("tool.change_directory", () => {
 
   it.effect("Parameters schema accepts a directory field", () =>
     Effect.gen(function* () {
-      const decoded = yield* Schema.decodeUnknown(Parameters)({ directory: "/some/path" })
+      const decoded = Schema.decodeSync(Parameters)({ directory: "/some/path" })
       expect(decoded.directory).toBe("/some/path")
     }),
   )
@@ -86,7 +97,8 @@ describe("tool.change_directory", () => {
     Effect.gen(function* () {
       const info = yield* ChangeDirectoryTool
       const tool = yield* Tool.init(info)
-      const exit = yield* tool.execute({}, makeCtx()).pipe(Effect.exit)
+      const execute = tool.execute as unknown as (args: unknown, ctx: Tool.Context) => ReturnType<typeof tool.execute>
+      const exit = yield* execute({}, makeCtx()).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
     }),
   )
