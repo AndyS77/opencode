@@ -25,8 +25,8 @@ const limit = 2 * 1024 * 1024
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
-const retryDelay = Duration.millis(500)
-const circuitThreshold = 3
+const retryDelay = Duration.millis(Number(process.env.SNAPSHOT_RETRY_DELAY_MS ?? 500))
+const circuitThreshold = Number(process.env.SNAPSHOT_CIRCUIT_THRESHOLD ?? 3)
 interface GitResult {
   readonly code: ChildProcessSpawner.ExitCode
   readonly text: string
@@ -40,6 +40,9 @@ const transientPatterns: readonly string[] = [
   "resource temporarily unavailable",
   "spawn enomem",
   "cannot allocate memory",
+  "not enough storage is available",
+  "not enough memory resources",
+  "insufficient memory",
 ]
 
 export function isTransientGitError(stderr: string): boolean {
@@ -96,7 +99,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           state.consecutiveFailures += 1
           if (state.consecutiveFailures >= circuitThreshold && !state.tripped) {
             state.tripped = true
-            yield* Effect.logError("snapshot circuit breaker tripped — snapshots disabled until next success", {
+            yield* Effect.logError("snapshot circuit breaker tripped — snapshots disabled until next success. Undo/restore will be unavailable until a snapshot succeeds.", {
               consecutiveFailures: state.consecutiveFailures,
               gitdir: state.gitdir,
             })
@@ -384,9 +387,17 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               const existed = yield* exists(state.gitdir)
               yield* fs.ensureDir(state.gitdir).pipe(Effect.orDie)
               if (!existed) {
-                yield* git(["init"], {
+                const initResult = yield* git(["init"], {
                   env: { GIT_DIR: state.gitdir, GIT_WORK_TREE: state.worktree },
                 })
+                if (initResult.code !== 0) {
+                  yield* recordFailure()
+                  yield* Effect.logWarning("failed to init snapshot git dir", {
+                    exitCode: initResult.code,
+                    stderr: initResult.stderr,
+                  })
+                  return
+                }
                 yield* git(["--git-dir", state.gitdir, "config", "core.autocrlf", "false"])
                 yield* git(["--git-dir", state.gitdir, "config", "core.longpaths", "true"])
                 yield* git(["--git-dir", state.gitdir, "config", "core.symlinks", "true"])
@@ -422,7 +433,8 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           return yield* locked(
             Effect.gen(function* () {
               if (state.tripped) return { hash, files: [] }
-              yield* add()
+              const ok = yield* add()
+              if (!ok) return { hash, files: [] }
               const result = yield* git(
                 [...quote, ...args(["diff", "--cached", "--no-ext-diff", "--name-only", hash, "--", "."])],
                 {
@@ -600,7 +612,8 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
           return yield* locked(
             Effect.gen(function* () {
               if (state.tripped) return ""
-              yield* add()
+              const ok = yield* add()
+              if (!ok) return ""
               const result = yield* git([...quote, ...args(["diff", "--cached", "--no-ext-diff", hash, "--", "."])], {
                 cwd: state.worktree,
               })
