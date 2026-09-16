@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm"
 import { Effect } from "effect"
 import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
-import { dbStats, pruneOrphanedEvents } from "@/cli/cmd/db"
+import { dbStats, pruneOrphanedEvents, pruneOldSessions } from "@/cli/cmd/db"
 
 const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
   Effect.runPromise(effect.pipe(Effect.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true }))))
@@ -125,29 +125,74 @@ describe("db prune orphaned events", () => {
   )
 })
 
-describe("db vacuum", () => {
-  test("reclaims free pages after deletion", () =>
+describe("db prune old sessions", () => {
+  test("deletes sessions older than max-age and their events", () =>
     run(
       Effect.gen(function* () {
         const db = yield* makeDb
 
-        yield* db.run(sql`CREATE TABLE IF NOT EXISTS junk (id TEXT PRIMARY KEY, data TEXT)`)
-        for (let i = 0; i < 100; i++) {
-          yield* db.run(sql`INSERT INTO junk (id, data) VALUES (${'junk_' + i}, ${'x'.repeat(4000)})`)
-        }
+        yield* db.run(sql`CREATE TABLE IF NOT EXISTS session (id TEXT PRIMARY KEY, time_created INTEGER, time_updated INTEGER)`)
+        yield* db.run(
+          sql`CREATE TABLE IF NOT EXISTS event (id TEXT PRIMARY KEY, aggregate_id TEXT, seq INTEGER, type TEXT, data TEXT)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE IF NOT EXISTS event_sequence (aggregate_id TEXT PRIMARY KEY, seq INTEGER, owner_id TEXT)`,
+        )
 
-        const beforePages = yield* db.get<{ page_count: number }>(sql`PRAGMA page_count`)
-        expect(beforePages?.page_count).toBeGreaterThan(10)
+        const now = Date.now()
+        const old = now - 40 * 24 * 60 * 60 * 1000
 
-        yield* db.run(sql`DELETE FROM junk`)
+        yield* db.run(sql`INSERT INTO session (id, time_created, time_updated) VALUES ('ses_old', ${old}, ${old})`)
+        yield* db.run(sql`INSERT INTO session (id, time_created, time_updated) VALUES ('ses_new', ${now}, ${now})`)
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('evt_1', 'ses_old', 0, 'x', '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('evt_2', 'ses_new', 0, 'x', '{}')`,
+        )
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('ses_old', 1)`)
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('ses_new', 1)`)
 
-        const afterDelete = yield* db.get<{ freelist_count: number }>(sql`PRAGMA freelist_count`)
-        expect(afterDelete?.freelist_count).toBeGreaterThan(0)
+        const result = yield* pruneOldSessions(db, 30)
 
-        yield* db.run(sql`VACUUM`)
+        expect(result.sessionsDeleted).toBe(1)
+        expect(result.eventsDeleted).toBe(1)
+        expect(result.sequencesDeleted).toBe(1)
 
-        const afterVacuumPages = yield* db.get<{ page_count: number }>(sql`PRAGMA page_count`)
-        expect(afterVacuumPages?.page_count).toBeLessThan(beforePages!.page_count)
+        const remaining = yield* db.all<{ id: string }>(sql`SELECT id FROM session`)
+        expect(remaining).toHaveLength(1)
+        expect(remaining[0].id).toBe("ses_new")
+      }),
+    ),
+  )
+
+  test("does not delete sessions within max-age", () =>
+    run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+
+        yield* db.run(sql`CREATE TABLE IF NOT EXISTS session (id TEXT PRIMARY KEY, time_created INTEGER, time_updated INTEGER)`)
+        yield* db.run(
+          sql`CREATE TABLE IF NOT EXISTS event (id TEXT PRIMARY KEY, aggregate_id TEXT, seq INTEGER, type TEXT, data TEXT)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE IF NOT EXISTS event_sequence (aggregate_id TEXT PRIMARY KEY, seq INTEGER, owner_id TEXT)`,
+        )
+
+        const now = Date.now()
+        const recent = now - 5 * 24 * 60 * 60 * 1000
+
+        yield* db.run(sql`INSERT INTO session (id, time_created, time_updated) VALUES ('ses_recent', ${recent}, ${recent})`)
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('evt_1', 'ses_recent', 0, 'x', '{}')`,
+        )
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('ses_recent', 1)`)
+
+        const result = yield* pruneOldSessions(db, 30)
+
+        expect(result.sessionsDeleted).toBe(0)
+        expect(result.eventsDeleted).toBe(0)
+        expect(result.sequencesDeleted).toBe(0)
       }),
     ),
   )
