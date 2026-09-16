@@ -4,6 +4,8 @@ import { Database } from "@opencode-ai/core/database/database"
 import { Effect } from "effect"
 import { sql } from "drizzle-orm"
 import { effectCmd } from "../effect-cmd"
+import { cmd, type WithDoubleDash } from "../cmd/cmd"
+import { renameSync, unlinkSync, existsSync } from "node:fs"
 
 type DbShape = Database.Interface["db"]
 
@@ -93,6 +95,27 @@ export function pruneOrphanedEvents(db: DbShape) {
   }).pipe(Effect.orDie)
 }
 
+export function pruneOldSessions(db: DbShape, maxAgeDays: number) {
+  return Effect.gen(function* () {
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
+
+    const candidates = yield* db
+      .all<{ id: string }>(sql`SELECT id FROM session WHERE time_updated < ${cutoff}`)
+      .pipe(Effect.orDie)
+
+    if (candidates.length === 0) return { sessionsDeleted: 0, eventsDeleted: 0, sequencesDeleted: 0 }
+
+    const ids = candidates.map((r) => r.id)
+    yield* db.run(sql`DELETE FROM session WHERE time_updated < ${cutoff}`)
+
+    const sessionsDeleted = (yield* db.get<{ c: number }>(sql`SELECT changes() as c`))?.c ?? 0
+
+    const pruneResult = yield* pruneOrphanedEvents(db)
+
+    return { sessionsDeleted, eventsDeleted: pruneResult.eventsDeleted, sequencesDeleted: pruneResult.sequencesDeleted }
+  }).pipe(Effect.orDie)
+}
+
 const QueryCommand = effectCmd({
   command: "$0 [query]",
   describe: "open an interactive sqlite3 shell or run a query",
@@ -165,7 +188,7 @@ const StatsCommand = effectCmd({
 
 const PruneCommand = effectCmd({
   command: "prune",
-  describe: "remove orphaned event data and reclaim space",
+  describe: "remove old or orphaned event data and reclaim space",
   instance: false,
   builder: (yargs: Argv) => {
     return yargs
@@ -174,14 +197,37 @@ const PruneCommand = effectCmd({
         default: false,
         describe: "Show what would be deleted without deleting",
       })
-      .option("vacuum", {
-        type: "boolean",
-        default: false,
-        describe: "Run VACUUM after pruning to reclaim disk space",
+      .option("max-age", {
+        type: "number",
+        describe: "Delete sessions older than N days (also removes their events)",
       })
   },
-  handler: Effect.fn("Cli.db.prune")(function* (args: { "dry-run": boolean; vacuum: boolean }) {
+  handler: Effect.fn("Cli.db.prune")(function* (args: { "dry-run": boolean; "max-age"?: number }) {
     const { db } = yield* Database.Service
+
+    if (args["max-age"] !== undefined) {
+      const cutoff = Date.now() - args["max-age"] * 24 * 60 * 60 * 1000
+      const candidates = yield* db
+        .all<{ id: string; time_updated: number }>(sql`SELECT id, time_updated FROM session WHERE time_updated < ${cutoff}`)
+        .pipe(Effect.orDie)
+
+      if (candidates.length === 0) {
+        console.log(`No sessions older than ${args["max-age"]} days found.`)
+        return
+      }
+
+      console.log(`Found ${candidates.length} session(s) older than ${args["max-age"]} days.`)
+
+      if (args["dry-run"]) {
+        console.log("\n--dry-run: no data was modified.")
+        return
+      }
+
+      const result = yield* pruneOldSessions(db, args["max-age"])
+      console.log(`Deleted ${result.sessionsDeleted} session(s), ${result.eventsDeleted.toLocaleString()} event rows, ${result.sequencesDeleted} sequence rows.`)
+      console.log("Run 'opencode db vacuum' to reclaim disk space.")
+      return
+    }
 
     const orphanedEvents = yield* db
       .all<{ aggregate_id: string; c: number }>(sql`
@@ -209,43 +255,76 @@ const PruneCommand = effectCmd({
 
     const result = yield* pruneOrphanedEvents(db)
     console.log(`Deleted ${result.eventsDeleted.toLocaleString()} event rows, ${result.sequencesDeleted} sequence rows.`)
-
-    if (args.vacuum) {
-      console.log("Running VACUUM...")
-      yield* db.run(sql`VACUUM`).pipe(Effect.orDie)
-      console.log("VACUUM complete.")
-    }
+    console.log("Run 'opencode db vacuum' to reclaim disk space.")
   }),
 })
 
-const VacuumCommand = effectCmd({
+// VACUUM INTO + file swap is used instead of plain VACUUM to avoid WAL blow-up
+// on large databases. Plain VACUUM in WAL mode can write a file comparable to the
+// database size into the WAL before completing. VACUUM INTO writes a compacted
+// copy to a separate file, then we swap it in after closing the connection.
+// See https://github.com/anomalyco/opencode/issues/33356#issuecomment-5692387560
+const VacuumCommand = cmd<{}, { "dry-run": boolean }>({
   command: "vacuum",
   describe: "reclaim free space from the database file",
-  instance: false,
-  handler: Effect.fn("Cli.db.vacuum")(function* () {
-    const { db } = yield* Database.Service
+  async handler() {
+    const { AppRuntime } = await import("@/effect/app-runtime")
+    const dbPath = Database.path()
+    const vacuumPath = `${dbPath}.vacuum`
 
-    const before = yield* db.get<{ page_count: number; freelist_count: number }>(sql`
-      SELECT page_count, (SELECT freelist_count FROM pragma_freelist_count) as freelist_count
-    `).pipe(Effect.orDie)
+    const before = await AppRuntime.runPromise(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+
+        const beforeStats = yield* db.get<{ page_count: number; freelist_count: number }>(sql`
+          SELECT page_count, (SELECT freelist_count FROM pragma_freelist_count) as freelist_count
+        `).pipe(Effect.orDie)
+
+        // Flush WAL into main database before vacuum
+        yield* db.run(sql`PRAGMA wal_checkpoint(TRUNCATE)`).pipe(Effect.orDie)
+
+        // VACUUM INTO creates a compacted copy without modifying the original.
+        // Unlike plain VACUUM, this does not cause WAL blow-up on large databases.
+        const escapedPath = vacuumPath.replace(/'/g, "''")
+        yield* db.run(sql.raw(`VACUUM INTO '${escapedPath}'`)).pipe(Effect.orDie)
+
+        return beforeStats
+      }),
+    )
+    // DB connection is now closed (runtime cleaned up)
 
     const beforePages = before?.page_count ?? 0
     const beforeFree = before?.freelist_count ?? 0
     console.log(`Before: ${beforePages} pages, ${beforeFree} free`)
-    console.log("Running VACUUM...")
+    console.log("VACUUM INTO complete, swapping files...")
 
-    yield* db.run(sql`VACUUM`).pipe(Effect.orDie)
+    // Phase 2: atomic file swap (connection is closed)
+    if (!existsSync(vacuumPath)) {
+      console.error("VACUUM INTO did not produce an output file.")
+      process.exit(1)
+    }
 
-    const after = yield* db.get<{ page_count: number; freelist_count: number }>(sql`
-      SELECT page_count, (SELECT freelist_count FROM pragma_freelist_count) as freelist_count
-    `).pipe(Effect.orDie)
+    renameSync(vacuumPath, dbPath)
+    // Clean up WAL and SHM files (will be recreated on next open)
+    try { unlinkSync(`${dbPath}-wal`) } catch {}
+    try { unlinkSync(`${dbPath}-shm`) } catch {}
+
+    // Phase 3: verify the swapped file
+    const after = await AppRuntime.runPromise(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        return yield* db.get<{ page_count: number; freelist_count: number }>(sql`
+          SELECT page_count, (SELECT freelist_count FROM pragma_freelist_count) as freelist_count
+        `).pipe(Effect.orDie)
+      }),
+    )
 
     const afterPages = after?.page_count ?? 0
-    const pageSize = (yield* db.get<{ page_size: number }>(sql`PRAGMA page_size`).pipe(Effect.orDie))?.page_size ?? 4096
+    const pageSize = 4096
     const reclaimedMB = Math.round(((beforePages - afterPages) * pageSize / 1024 / 1024) * 100) / 100
     console.log(`After: ${afterPages} pages, ${after?.freelist_count ?? 0} free`)
     console.log(`Reclaimed: ${reclaimedMB} MB`)
-  }),
+  },
 })
 
 export const DbCommand = effectCmd({
