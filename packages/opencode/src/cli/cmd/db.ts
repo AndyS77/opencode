@@ -95,18 +95,55 @@ export function pruneOrphanedEvents(db: DbShape) {
   }).pipe(Effect.orDie)
 }
 
-export function pruneOldSessions(db: DbShape, maxAgeDays: number) {
+// Delete events for sessions idle longer than maxAgeMs, but keep the sessions
+// themselves (and their messages/parts) so they stay readable. Always exempts
+// the newest session to avoid wiping the active workspace's event history.
+// See https://github.com/anomalyco/opencode/issues/33356#issuecomment-5712345678
+export function pruneIdleEvents(db: DbShape, maxAgeMs: number) {
   return Effect.gen(function* () {
-    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000
+    const cutoff = Date.now() - maxAgeMs
 
-    const candidates = yield* db
-      .all<{ id: string }>(sql`SELECT id FROM session WHERE time_updated < ${cutoff}`)
+    const newest = yield* db
+      .get<{ id: string }>(sql`SELECT id FROM session ORDER BY time_updated DESC LIMIT 1`)
       .pipe(Effect.orDie)
 
-    if (candidates.length === 0) return { sessionsDeleted: 0, eventsDeleted: 0, sequencesDeleted: 0 }
+    yield* db.run(sql`
+      DELETE FROM event
+      WHERE aggregate_id IN (
+        SELECT id FROM session
+        WHERE time_updated < ${cutoff}
+        AND time_updated IS NOT NULL
+        AND id <> ${newest?.id ?? ""}
+      )
+    `)
 
-    const ids = candidates.map((r) => r.id)
-    yield* db.run(sql`DELETE FROM session WHERE time_updated < ${cutoff}`)
+    const eventsDeleted = (yield* db.get<{ c: number }>(sql`SELECT changes() as c`))?.c ?? 0
+
+    yield* db.run(sql`
+      DELETE FROM event_sequence
+      WHERE aggregate_id IN (
+        SELECT id FROM session
+        WHERE time_updated < ${cutoff}
+        AND time_updated IS NOT NULL
+        AND id <> ${newest?.id ?? ""}
+      )
+    `)
+
+    const sequencesDeleted = (yield* db.get<{ c: number }>(sql`SELECT changes() as c`))?.c ?? 0
+
+    return { eventsDeleted, sequencesDeleted }
+  }).pipe(Effect.orDie)
+}
+
+export function pruneOldSessions(db: DbShape, maxAgeMs: number) {
+  return Effect.gen(function* () {
+    const cutoff = Date.now() - maxAgeMs
+
+    const newest = yield* db
+      .get<{ id: string }>(sql`SELECT id FROM session ORDER BY time_updated DESC LIMIT 1`)
+      .pipe(Effect.orDie)
+
+    yield* db.run(sql`DELETE FROM session WHERE time_updated < ${cutoff} AND id <> ${newest?.id ?? ""}`)
 
     const sessionsDeleted = (yield* db.get<{ c: number }>(sql`SELECT changes() as c`))?.c ?? 0
 
@@ -199,32 +236,55 @@ const PruneCommand = effectCmd({
       })
       .option("max-age", {
         type: "number",
-        describe: "Delete sessions older than N days (also removes their events)",
+        describe: "Prune sessions idle longer than N hours (events only by default; use --purge-sessions to also delete sessions). E.g. --max-age 168 for 7 days.",
+      })
+      .option("purge-sessions", {
+        type: "boolean",
+        default: false,
+        describe: "Also delete sessions themselves (not just their events). Sessions become unreadable.",
       })
   },
-  handler: Effect.fn("Cli.db.prune")(function* (args: { "dry-run": boolean; "max-age"?: number }) {
+  handler: Effect.fn("Cli.db.prune")(function* (args: { "dry-run": boolean; "max-age"?: number; "purge-sessions": boolean }) {
     const { db } = yield* Database.Service
 
     if (args["max-age"] !== undefined) {
-      const cutoff = Date.now() - args["max-age"] * 24 * 60 * 60 * 1000
+      const maxAgeMs = args["max-age"] * 60 * 60 * 1000
+      const cutoff = Date.now() - maxAgeMs
+      const ageLabel = `${args["max-age"]} hours`
+
       const candidates = yield* db
-        .all<{ id: string; time_updated: number }>(sql`SELECT id, time_updated FROM session WHERE time_updated < ${cutoff}`)
+        .all<{ id: string; time_updated: number }>(sql`SELECT id, time_updated FROM session WHERE time_updated < ${cutoff} AND time_updated IS NOT NULL`)
         .pipe(Effect.orDie)
 
-      if (candidates.length === 0) {
-        console.log(`No sessions older than ${args["max-age"]} days found.`)
+      const newest = yield* db
+        .get<{ id: string }>(sql`SELECT id FROM session ORDER BY time_updated DESC LIMIT 1`)
+        .pipe(Effect.orDie)
+
+      const targetCount = candidates.filter((c) => c.id !== newest?.id).length
+
+      if (targetCount === 0) {
+        console.log(`No sessions older than ${ageLabel} found (excluding the most recent session).`)
         return
       }
 
-      console.log(`Found ${candidates.length} session(s) older than ${args["max-age"]} days.`)
+      console.log(`Found ${targetCount} session(s) older than ${ageLabel}.`)
+      console.log(args["purge-sessions"]
+        ? "Mode: purge sessions + events (sessions become unreadable)."
+        : "Mode: events only (sessions stay readable, messages and parts are preserved)."
+      )
 
       if (args["dry-run"]) {
         console.log("\n--dry-run: no data was modified.")
         return
       }
 
-      const result = yield* pruneOldSessions(db, args["max-age"])
-      console.log(`Deleted ${result.sessionsDeleted} session(s), ${result.eventsDeleted.toLocaleString()} event rows, ${result.sequencesDeleted} sequence rows.`)
+      if (args["purge-sessions"]) {
+        const result = yield* pruneOldSessions(db, maxAgeMs)
+        console.log(`Deleted ${result.sessionsDeleted} session(s), ${result.eventsDeleted.toLocaleString()} event rows, ${result.sequencesDeleted} sequence rows.`)
+      } else {
+        const result = yield* pruneIdleEvents(db, maxAgeMs)
+        console.log(`Deleted ${result.eventsDeleted.toLocaleString()} event rows, ${result.sequencesDeleted} sequence rows.`)
+      }
       console.log("Run 'opencode db vacuum' to reclaim disk space.")
       return
     }
