@@ -196,6 +196,78 @@ describe("db prune idle events", () => {
       }),
     ),
   )
+
+  test("deletes events for multiple idle sessions but keeps newest", () =>
+    run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+
+        yield* db.run(sql`CREATE TABLE IF NOT EXISTS session (id TEXT PRIMARY KEY, time_created INTEGER, time_updated INTEGER)`)
+        yield* db.run(
+          sql`CREATE TABLE IF NOT EXISTS event (id TEXT PRIMARY KEY, aggregate_id TEXT, seq INTEGER, type TEXT, data TEXT)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE IF NOT EXISTS event_sequence (aggregate_id TEXT PRIMARY KEY, seq INTEGER, owner_id TEXT)`,
+        )
+
+        const now = Date.now()
+        const old1 = now - 40 * 24 * 60 * 60 * 1000
+        const old2 = now - 35 * 24 * 60 * 60 * 1000
+
+        yield* db.run(sql`INSERT INTO session (id, time_created, time_updated) VALUES ('ses_old1', ${old1}, ${old1})`)
+        yield* db.run(sql`INSERT INTO session (id, time_created, time_updated) VALUES ('ses_old2', ${old2}, ${old2})`)
+        yield* db.run(sql`INSERT INTO session (id, time_created, time_updated) VALUES ('ses_new', ${now}, ${now})`)
+        yield* db.run(sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('evt_1', 'ses_old1', 0, 'x', '{}')`)
+        yield* db.run(sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('evt_2', 'ses_old2', 0, 'x', '{}')`)
+        yield* db.run(sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('evt_3', 'ses_new', 0, 'x', '{}')`)
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('ses_old1', 1)`)
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('ses_old2', 1)`)
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('ses_new', 1)`)
+
+        const result = yield* pruneIdleEvents(db, 30 * 24 * 60 * 60 * 1000)
+
+        expect(result.eventsDeleted).toBe(2)
+        expect(result.sequencesDeleted).toBe(2)
+
+        const sessions = yield* db.all<{ id: string }>(sql`SELECT id FROM session`)
+        expect(sessions).toHaveLength(3)
+
+        const events = yield* db.all<{ aggregate_id: string }>(sql`SELECT aggregate_id FROM event`)
+        expect(events).toHaveLength(1)
+        expect(events[0].aggregate_id).toBe("ses_new")
+      }),
+    ),
+  )
+
+  test("does not delete events for sessions with NULL time_updated", () =>
+    run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+
+        yield* db.run(sql`CREATE TABLE IF NOT EXISTS session (id TEXT PRIMARY KEY, time_created INTEGER, time_updated INTEGER)`)
+        yield* db.run(
+          sql`CREATE TABLE IF NOT EXISTS event (id TEXT PRIMARY KEY, aggregate_id TEXT, seq INTEGER, type TEXT, data TEXT)`,
+        )
+        yield* db.run(
+          sql`CREATE TABLE IF NOT EXISTS event_sequence (aggregate_id TEXT PRIMARY KEY, seq INTEGER, owner_id TEXT)`,
+        )
+
+        const now = Date.now()
+
+        yield* db.run(sql`INSERT INTO session (id, time_created, time_updated) VALUES ('ses_null', ${now}, NULL)`)
+        yield* db.run(sql`INSERT INTO session (id, time_created, time_updated) VALUES ('ses_new', ${now}, ${now})`)
+        yield* db.run(sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('evt_1', 'ses_null', 0, 'x', '{}')`)
+        yield* db.run(sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('evt_2', 'ses_new', 0, 'x', '{}')`)
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('ses_null', 1)`)
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('ses_new', 1)`)
+
+        const result = yield* pruneIdleEvents(db, 30 * 24 * 60 * 60 * 1000)
+
+        expect(result.eventsDeleted).toBe(0)
+        expect(result.sequencesDeleted).toBe(0)
+      }),
+    ),
+  )
 })
 
 describe("db prune old sessions", () => {

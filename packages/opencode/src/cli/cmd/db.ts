@@ -98,7 +98,7 @@ export function pruneOrphanedEvents(db: DbShape) {
 // Delete events for sessions idle longer than maxAgeMs, but keep the sessions
 // themselves (and their messages/parts) so they stay readable. Always exempts
 // the newest session to avoid wiping the active workspace's event history.
-// See https://github.com/anomalyco/opencode/issues/33356#issuecomment-5712345678
+// See https://github.com/anomalyco/opencode/issues/33356#issuecomment-5885609637
 export function pruneIdleEvents(db: DbShape, maxAgeMs: number) {
   return Effect.gen(function* () {
     const cutoff = Date.now() - maxAgeMs
